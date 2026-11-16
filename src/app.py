@@ -76,7 +76,7 @@ def main(page: ft.Page):
             content=ft.Column(
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,  # todo centrado
                 spacing=10,
-                controls=[ 
+                controls=[
                     ft.Image(src="logo.png", width=120, height=120, fit=ft.BoxFit.CONTAIN),   # logo de CineData
                     ft.Row(                                         # datos calculados con Pandas
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -101,7 +101,7 @@ def main(page: ft.Page):
                 tarjeta_opcion(ft.Icons.ADD, "Agregar película", "Registrar una película nueva",
                                mostrar_agregar),
                 tarjeta_opcion(ft.Icons.SEARCH, "Consultar y modificar", "Buscar por código y editar",
-                               lambda e: mostrar_pantalla("Consultar y modificar")),
+                               mostrar_consultar),
                 tarjeta_opcion(ft.Icons.FILTER_ALT_OUTLINED, "Aplicar filtros", "Ver solo las que te interesan",
                                lambda e: mostrar_pantalla("Aplicar filtros")),
                 tarjeta_opcion(ft.Icons.SCATTER_PLOT_OUTLINED, "Visualizar gráficos", "Dispersión, caja e histograma",
@@ -154,7 +154,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Ventana AGREGAR PELÍCULA ----------
+    # ---------- Formulario compartido (lo usan AGREGAR y CONSULTAR) ----------
     def grupo(titulo, controles):                                   # recuadro con título (como en el diseño)
         return ft.Container(
             bgcolor=BLANCO,
@@ -167,104 +167,119 @@ def main(page: ft.Page):
             ]),
         )
 
+    def crear_campos():                                             # crea todos los campos vacíos del formulario
+        numero = ft.KeyboardType.NUMBER
+        return {
+            "Titulo": ft.TextField(label="Título", width=300),
+            "Genero": ft.Dropdown(label="Género principal", width=220,
+                                  options=[ft.DropdownOption(g) for g in sorted(df["Genero"].unique())]),
+            "Director": ft.TextField(label="Director", width=260),
+            "Nota": ft.TextField(label="Nota IMDb (0 a 10)", width=200, keyboard_type=numero),
+            "Duracion": ft.TextField(label="Duración (min)", width=170, keyboard_type=numero),
+            "Año": ft.TextField(label="Año", width=160, keyboard_type=numero),
+            "Clasificacion": ft.Dropdown(label="Clasificación", width=170,
+                                         options=[ft.DropdownOption(c) for c in sorted(df["Clasificacion"].unique())]),
+            "Metascore": ft.TextField(label="Metascore (opcional)", width=220, keyboard_type=numero),
+            "Votos": ft.TextField(label="Votos", width=170, keyboard_type=numero),
+            "Recaudacion": ft.TextField(label="Recaudación en millones USD (opcional)", width=360, keyboard_type=numero),
+            "Popularidad": ft.Dropdown(label="Popularidad", width=170,
+                                       options=[ft.DropdownOption(p) for p in ["Alta", "Media", "Baja"]]),
+        }
+
+    def armar_grupos(campos, codigo):                               # acomoda los campos en los 3 recuadros
+        return [
+            grupo("Datos principales", [codigo, campos["Titulo"], campos["Genero"], campos["Director"]]),
+            grupo("Calificación y duración", [campos["Nota"], campos["Duracion"], campos["Año"],
+                                              campos["Clasificacion"], campos["Metascore"]]),
+            grupo("Público y taquilla", [campos["Votos"], campos["Recaudacion"], campos["Popularidad"]]),
+        ]
+
+    def leer_numero(campo, minimo, maximo, entero=False, opcional=False):
+        texto = campo.value.strip().replace(",", ".")                # acepta 8,5 o 8.5
+        if texto == "":                                              # si está vacío…
+            if opcional:                                             # …y es opcional → sin dato
+                return None
+            campo.error = "Campo obligatorio"                        # …y es obligatorio → error
+            return "error"
+        try:
+            valor = int(float(texto)) if entero else float(texto)    # intenta convertirlo en número
+            if entero and float(texto) != valor:                     # ej. 102.5 no es entero
+                raise ValueError
+        except ValueError:                                           # si no es número…
+            campo.error = "Solo enteros" if entero else "Solo números"
+            return "error"
+        if not (minimo <= valor <= maximo):                          # fuera de rango
+            campo.error = f"Entre {minimo} y {maximo}"
+            return "error"
+        return valor
+
+    def validar(campos):                                            # revisa todo; devuelve los valores o None si hay error
+        for c in campos.values():                                    # borra los errores anteriores
+            if isinstance(c, ft.Dropdown):
+                c.error_text = None
+            else:
+                c.error = None
+        hay_error = False
+        for clave in ["Titulo", "Director"]:                         # textos obligatorios
+            if campos[clave].value.strip() == "":
+                campos[clave].error = "Campo obligatorio"
+                hay_error = True
+        for clave in ["Genero", "Clasificacion", "Popularidad"]:     # listas obligatorias
+            if campos[clave].value is None:
+                campos[clave].error_text = "Elige una opción"
+                hay_error = True
+        valores = {
+            "Nota": leer_numero(campos["Nota"], 0, 10),
+            "Duracion": leer_numero(campos["Duracion"], 1, 600, entero=True),
+            "Año": leer_numero(campos["Año"], 1888, 2030, entero=True),
+            "Metascore": leer_numero(campos["Metascore"], 0, 100, opcional=True),
+            "Votos": leer_numero(campos["Votos"], 0, 10_000_000, entero=True),
+            "Recaudacion": leer_numero(campos["Recaudacion"], 0, 10_000, opcional=True),
+        }
+        if "error" in valores.values() or hay_error:
+            return None
+        for clave in ["Titulo", "Director"]:
+            valores[clave] = campos[clave].value.strip()
+        for clave in ["Genero", "Clasificacion", "Popularidad"]:
+            valores[clave] = campos[clave].value
+        return valores
+
+    def boton_principal(texto, icono, accion):                      # botón negro (Guardar)
+        return ft.FilledButton(texto, icon=icono, style=ft.ButtonStyle(bgcolor=NEGRO, color=BLANCO),
+                               on_click=accion)
+
+    def avisar(texto):                                              # mensaje que aparece abajo unos segundos
+        page.show_dialog(ft.SnackBar(ft.Text(texto)))
+
+    # ---------- Ventana AGREGAR PELÍCULA ----------
     def mostrar_agregar(e=None):
         page.clean()                                                # borra lo que haya en pantalla
         siguiente_codigo = "PEL-" + str(len(df) + 1).zfill(3)       # ej. PEL-399
-
-        # --- Campos del formulario ---
         codigo = ft.TextField(label="Código", value=siguiente_codigo, read_only=True, width=160)   # no se edita
-        titulo = ft.TextField(label="Título", width=300)
-        genero = ft.Dropdown(label="Género principal", width=220,
-                             options=[ft.DropdownOption(g) for g in sorted(df["Genero"].unique())])  # géneros del dataset
-        director = ft.TextField(label="Director", width=260)
-        nota = ft.TextField(label="Nota IMDb (0 a 10)", width=200, keyboard_type=ft.KeyboardType.NUMBER)
-        duracion = ft.TextField(label="Duración (min)", width=170, keyboard_type=ft.KeyboardType.NUMBER)
-        anio = ft.TextField(label="Año", width=130, keyboard_type=ft.KeyboardType.NUMBER)
-        clasificacion = ft.Dropdown(label="Clasificación", width=170,
-                                    options=[ft.DropdownOption(c) for c in ["G", "PG", "PG-13", "R", "Not Rated", "Sin dato"]])
-        metascore = ft.TextField(label="Metascore (opcional)", width=220, keyboard_type=ft.KeyboardType.NUMBER)
-        votos = ft.TextField(label="Votos", width=170, keyboard_type=ft.KeyboardType.NUMBER)
-        recaudacion = ft.TextField(label="Recaudación en millones USD (opcional)", width=360,
-                                   keyboard_type=ft.KeyboardType.NUMBER)
-        popularidad = ft.Dropdown(label="Popularidad", width=170,
-                                  options=[ft.DropdownOption(p) for p in ["Alta", "Media", "Baja"]])
-        mensaje = ft.Text("", size=15)                              # aquí aparece "guardada" o el error
+        campos = crear_campos()                                     # todos los campos vacíos
+        mensaje = ft.Text("", size=15, color="#A32D2D")             # aquí aparece el aviso de error
 
-        campos_texto = [titulo, director, nota, duracion, anio, metascore, votos, recaudacion]
-        listas = [genero, clasificacion, popularidad]
-
-        # --- Validar un número ---
-        def leer_numero(campo, minimo, maximo, entero=False, opcional=False):
-            texto = campo.value.strip().replace(",", ".")            # acepta 8,5 o 8.5
-            if texto == "":                                          # si está vacío…
-                if opcional:                                         # …y es opcional → sin dato
-                    return None
-                campo.error = "Campo obligatorio"                    # …y es obligatorio → error
-                return "error"
-            try:
-                valor = int(texto) if entero else float(texto)       # intenta convertirlo en número
-            except ValueError:                                       # si no es número…
-                campo.error = "Solo enteros" if entero else "Solo números"
-                return "error"
-            if not (minimo <= valor <= maximo):                      # fuera de rango
-                campo.error = f"Entre {minimo} y {maximo}"
-                return "error"
-            return valor
-
-        # --- Botón GUARDAR ---
         def guardar(e):
             global df                                                # vamos a cambiar el DataFrame de afuera
-            for c in campos_texto:                                   # borra los errores anteriores
-                c.error = None
-            for l in listas:
-                l.error_text = None
-            hay_error = False
-
-            for c in [titulo, director]:                             # campos de texto obligatorios
-                if c.value.strip() == "":
-                    c.error = "Campo obligatorio"
-                    hay_error = True
-            for l in listas:                                         # listas obligatorias
-                if l.value is None:
-                    l.error_text = "Elige una opción"
-                    hay_error = True
-
-            v_nota = leer_numero(nota, 0, 10)
-            v_duracion = leer_numero(duracion, 1, 600, entero=True)
-            v_anio = leer_numero(anio, 1888, 2030, entero=True)
-            v_meta = leer_numero(metascore, 0, 100, opcional=True)
-            v_votos = leer_numero(votos, 0, 10_000_000, entero=True)
-            v_recaudacion = leer_numero(recaudacion, 0, 10_000, opcional=True)
-            if "error" in [v_nota, v_duracion, v_anio, v_meta, v_votos, v_recaudacion]:
-                hay_error = True
-
-            if hay_error:                                            # si algo falló, avisa y no guarda
+            valores = validar(campos)
+            if valores is None:                                      # si algo falló, avisa y no guarda
                 mensaje.value = "Revisa los campos marcados en rojo."
-                mensaje.color = "#A32D2D"
                 page.update()
                 return
-
-            nueva = {                                                # la fila nueva, con las columnas del CSV
-                "Codigo": codigo.value, "Titulo": titulo.value.strip(), "Genero": genero.value,
-                "Nota": v_nota, "Duracion": v_duracion, "Director": director.value.strip(),
-                "Popularidad": popularidad.value, "Año": v_anio, "Clasificacion": clasificacion.value,
-                "Metascore": v_meta, "Recaudacion": v_recaudacion, "Votos": v_votos,
-                "Generos": genero.value, "Descripcion": "",
-            }
+            nueva = {"Codigo": codigo.value, **valores,              # la fila nueva
+                     "Generos": valores["Genero"], "Descripcion": ""}
             df = pd.concat([df, pd.DataFrame([nueva])], ignore_index=True)   # agrega la fila al DataFrame
             df.to_csv(RUTA_DATOS, index=False)                       # guarda el CSV actualizado
+            avisar(f"{nueva['Titulo']} guardada como {codigo.value}")
+            mostrar_agregar()                                        # formulario vacío con el código siguiente
 
-            page.show_dialog(ft.SnackBar(ft.Text(f"{nueva['Titulo']} guardada como {codigo.value}")))
-            mostrar_agregar()                                        # recarga el formulario vacío con el código siguiente
-
-        # --- Botón LIMPIAR ---
         def limpiar(e):
-            for c in campos_texto:
-                c.value = ""
-                c.error = None
-            for l in listas:
-                l.value = None
-                l.error_text = None
+            for c in campos.values():
+                c.value = None if isinstance(c, ft.Dropdown) else ""
+                if isinstance(c, ft.Dropdown):
+                    c.error_text = None
+                else:
+                    c.error = None
             mensaje.value = ""
             page.update()
 
@@ -275,17 +290,120 @@ def main(page: ft.Page):
                 content=ft.Column(
                     spacing=18,
                     horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                    controls=[
-                        grupo("Datos principales", [codigo, titulo, genero, director]),
-                        grupo("Calificación y duración", [nota, duracion, anio, clasificacion, metascore]),
-                        grupo("Público y taquilla", [votos, recaudacion, popularidad]),
+                    controls=armar_grupos(campos, codigo) + [
                         ft.Row(spacing=12, wrap=True, controls=[
-                            ft.FilledButton("Guardar película", icon=ft.Icons.SAVE_OUTLINED,
-                                            style=ft.ButtonStyle(bgcolor=NEGRO, color=BLANCO),
-                                            on_click=guardar),
+                            boton_principal("Guardar película", ft.Icons.SAVE_OUTLINED, guardar),
                             ft.OutlinedButton("Limpiar campos", on_click=limpiar),
                             mensaje,
                         ]),
+                    ],
+                ),
+            ),
+        )
+
+    # ---------- Ventana CONSULTAR Y MODIFICAR ----------
+    def mostrar_consultar(e=None):
+        page.clean()                                                # borra lo que haya en pantalla
+        caja_codigo = ft.TextField(label="Código de la película", hint_text="PEL-021", width=240)
+        resultado = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)   # aquí sale lo encontrado
+
+        def texto_de(valor):                                         # convierte un dato del df en texto para el campo
+            if pd.isna(valor):                                       # dato vacío (NaN) → campo vacío
+                return ""
+            if isinstance(valor, float) and valor.is_integer():      # 74.0 → "74"
+                return str(int(valor))
+            return str(valor)
+
+        def no_existe(codigo):                                       # recuadro naranja cuando no se encuentra
+            return ft.Container(
+                bgcolor="#FBF1E6",
+                border=ft.Border.all(1, "#EBC9A4"),
+                border_radius=10,
+                padding=20,
+                content=ft.Row(
+                    wrap=True,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Column(spacing=4, controls=[
+                            ft.Text(f"No existe una película con el código {codigo}",
+                                    size=16, weight=ft.FontWeight.W_500, color="#6E3A0C"),
+                            ft.Text("Puedes registrarla ahora mismo.", size=14, color="#6E3A0C"),
+                        ]),
+                        boton_principal("Agregar esta película", ft.Icons.ADD, mostrar_agregar),
+                    ],
+                ),
+            )
+
+        def formulario_edicion(indice):                              # formulario lleno con los datos de la película
+            fila = df.loc[indice]                                    # la fila encontrada
+            codigo = ft.TextField(label="Código", value=fila["Codigo"], read_only=True, width=160)
+            campos = crear_campos()
+            for clave, campo in campos.items():                      # llena cada campo con su valor actual
+                campo.value = fila[clave] if isinstance(campo, ft.Dropdown) else texto_de(fila[clave])
+            mensaje = ft.Text("", size=15, color="#A32D2D")
+
+            def guardar_cambios(e):
+                valores = validar(campos)
+                if valores is None:
+                    mensaje.value = "Revisa los campos marcados en rojo."
+                    page.update()
+                    return
+                for clave, valor in valores.items():                 # actualiza la fila columna por columna
+                    df.loc[indice, clave] = valor
+                df.to_csv(RUTA_DATOS, index=False)                   # guarda el CSV actualizado
+                mensaje.value = ""
+                avisar(f"Cambios guardados en {fila['Codigo']}")
+                page.update()
+
+            aviso_ok = ft.Container(                                 # franja verde "encontrada"
+                bgcolor="#E7F2DF", border_radius=8, padding=12,
+                content=ft.Row(spacing=8, controls=[
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, color="#2D6A1E", size=20),
+                    ft.Text("Película encontrada. Puedes editar sus datos.", color="#2D6A1E", size=15),
+                ]),
+            )
+            return [aviso_ok] + armar_grupos(campos, codigo) + [
+                ft.Row(spacing=12, wrap=True, controls=[
+                    boton_principal("Guardar cambios", ft.Icons.SAVE_OUTLINED, guardar_cambios),
+                    mensaje,
+                ]),
+            ]
+
+        def buscar(e):
+            texto = caja_codigo.value.strip().upper()                # quita espacios y pasa a mayúsculas
+            if texto.isdigit():                                      # si escribió solo "21"…
+                texto = "PEL-" + texto.zfill(3)                      # …lo convierte en "PEL-021"
+            caja_codigo.value = texto
+            resultado.controls.clear()                               # borra el resultado anterior
+            encontradas = df.index[df["Codigo"] == texto]            # busca filas con ese código
+            if texto == "":
+                caja_codigo.error = "Escribe un código"
+            elif len(encontradas) == 0:                              # no existe
+                caja_codigo.error = None
+                resultado.controls.append(no_existe(texto))
+            else:                                                    # sí existe
+                caja_codigo.error = None
+                resultado.controls.extend(formulario_edicion(encontradas[0]))
+            page.update()
+
+        caja_codigo.on_submit = buscar                               # Enter en la caja también busca
+
+        page.add(
+            barra_superior("Consultar y modificar", "Busca una película por su código"),
+            ft.Container(
+                padding=28,
+                content=ft.Column(
+                    spacing=18,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                    controls=[
+                        ft.Row(spacing=12, wrap=True, vertical_alignment=ft.CrossAxisAlignment.START, controls=[
+                            caja_codigo,
+                            boton_principal("Buscar", ft.Icons.SEARCH, buscar),
+                            ft.Container(padding=ft.Padding.only(top=14),
+                                         content=ft.Text("Prueba PEL-021 o PEL-999", size=13, color=GRIS_TEXTO)),
+                        ]),
+                        resultado,
                     ],
                 ),
             ),
