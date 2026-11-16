@@ -122,7 +122,7 @@ def main(page: ft.Page):
             controls=[
                 tarjeta_opcion(ft.Icons.ADD, "Agregar película", "Registrar una película nueva",
                                mostrar_agregar),
-                tarjeta_opcion(ft.Icons.SEARCH, "Consultar y modificar", "Buscar por código y editar",
+                tarjeta_opcion(ft.Icons.SEARCH, "Consultar y modificar", "Buscar por nombre o código",
                                mostrar_consultar),
                 tarjeta_opcion(ft.Icons.FILTER_ALT_OUTLINED, "Aplicar filtros", "Ver solo las que te interesan",
                                mostrar_filtros),
@@ -326,7 +326,7 @@ def main(page: ft.Page):
     # ---------- Ventana CONSULTAR Y MODIFICAR ----------
     def mostrar_consultar(e=None):
         page.clean()                                                # borra lo que haya en pantalla
-        caja_codigo = ft.TextField(label="Código de la película", hint_text="PEL-021", width=240)
+        caja_codigo = ft.TextField(label="Nombre o código de la película", hint_text="Interstellar o PEL-021", width=320)
         resultado = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)   # aquí sale lo encontrado
 
         def texto_de(valor):                                         # convierte un dato del df en texto para el campo
@@ -336,7 +336,7 @@ def main(page: ft.Page):
                 return str(int(valor))
             return str(valor)
 
-        def no_existe(codigo):                                       # recuadro naranja cuando no se encuentra
+        def no_existe(busqueda):                                     # recuadro naranja cuando no se encuentra
             return ft.Container(
                 bgcolor="#FBF1E6",
                 border=ft.Border.all(1, "#EBC9A4"),
@@ -348,7 +348,7 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Column(spacing=4, controls=[
-                            ft.Text(f"No existe una película con el código {codigo}",
+                            ft.Text(f"No encontramos ninguna película con «{busqueda}»",
                                     size=16, weight=ft.FontWeight.W_500, color="#6E3A0C"),
                             ft.Text("Puedes registrarla ahora mismo.", size=14, color="#6E3A0C"),
                         ]),
@@ -392,27 +392,59 @@ def main(page: ft.Page):
                 ]),
             ]
 
+        def lista_opciones(indices):                                # varias coinciden: lista para elegir una
+            def elegir(indice):                                      # al tocar una, muestra su formulario
+                resultado.controls.clear()
+                resultado.controls.extend(formulario_edicion(indice))
+                page.update()
+
+            filas = []
+            for i in indices[:10]:                                   # máximo 10 opciones
+                f = df.loc[i]
+                filas.append(ft.Container(
+                    bgcolor=BLANCO, border=ft.Border.all(1, GRIS_BORDE), border_radius=8,
+                    padding=ft.Padding.symmetric(vertical=10, horizontal=16), ink=True,
+                    on_click=lambda e, i=i: elegir(i),               # i=i: cada opción recuerda SU película
+                    content=ft.Row(spacing=12, controls=[
+                        ft.Icon(ft.Icons.MOVIE_OUTLINED, color=CAFE, size=20),
+                        ft.Text(f["Titulo"], size=15, weight=ft.FontWeight.W_500, color=NEGRO, expand=True),
+                        ft.Text(f"{f['Año']} · {f['Codigo']}", size=13, color=GRIS_TEXTO),
+                    ]),
+                ))
+            mas = [ft.Text(f"…y {len(indices) - 10} más. Escribe un nombre más completo.", size=13,
+                           color=GRIS_TEXTO)] if len(indices) > 10 else []
+            return [ft.Text(f"{len(indices)} películas coinciden. Elige una:", size=16,
+                            weight=ft.FontWeight.W_500, color=NEGRO)] + filas + mas
+
         def buscar(e):
-            texto = caja_codigo.value.strip().upper()                # quita espacios y pasa a mayúsculas
-            if texto.isdigit():                                      # si escribió solo "21"…
-                texto = "PEL-" + texto.zfill(3)                      # …lo convierte en "PEL-021"
-            caja_codigo.value = texto
+            texto = caja_codigo.value.strip()                        # quita espacios al inicio y al final
             resultado.controls.clear()                               # borra el resultado anterior
-            encontradas = df.index[df["Codigo"] == texto]            # busca filas con ese código
+            caja_codigo.error = None
             if texto == "":
-                caja_codigo.error = "Escribe un código"
-            elif len(encontradas) == 0:                              # no existe
-                caja_codigo.error = None
-                resultado.controls.append(no_existe(texto))
-            else:                                                    # sí existe
-                caja_codigo.error = None
+                caja_codigo.error = "Escribe un nombre o un código"
+                page.update()
+                return
+
+            if texto.isdigit() or texto.upper().startswith("PEL-"):  # parece un CÓDIGO (21 o PEL-021)
+                codigo = "PEL-" + texto.zfill(3) if texto.isdigit() else texto.upper()
+                caja_codigo.value = codigo
+                encontradas = list(df.index[df["Codigo"] == codigo])
+            else:                                                    # si no, busca por NOMBRE
+                coincide = df["Titulo"].str.contains(texto, case=False, regex=False)   # sin importar mayúsculas
+                encontradas = list(df.index[coincide])
+
+            if len(encontradas) == 0:                                # no existe → ofrecer agregarla
+                resultado.controls.append(no_existe(caja_codigo.value))
+            elif len(encontradas) == 1:                              # una sola → directo al formulario
                 resultado.controls.extend(formulario_edicion(encontradas[0]))
+            else:                                                    # varias → lista para elegir
+                resultado.controls.extend(lista_opciones(encontradas))
             page.update()
 
         caja_codigo.on_submit = buscar                               # Enter en la caja también busca
 
         page.add(
-            barra_superior("Consultar y modificar", "Busca una película por su código"),
+            barra_superior("Consultar y modificar", "Busca una película por su nombre o su código"),
             ft.Container(
                 padding=28,
                 content=ft.Column(
@@ -423,7 +455,7 @@ def main(page: ft.Page):
                             caja_codigo,
                             boton_principal("Buscar", ft.Icons.SEARCH, buscar),
                             ft.Container(padding=ft.Padding.only(top=14),
-                                         content=ft.Text("Prueba PEL-021 o PEL-999", size=13, color=GRIS_TEXTO)),
+                                         content=ft.Text("Prueba: interstellar, lord o 21", size=13, color=GRIS_TEXTO)),
                         ]),
                         resultado,
                     ],
