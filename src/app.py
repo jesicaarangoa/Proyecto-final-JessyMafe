@@ -1,6 +1,10 @@
 import flet as ft                                                   # librería para la interfaz
 import pandas as pd                                                 # para leer el CSV limpio
 from pathlib import Path                                            # para armar rutas de archivos
+import io                                                           # para guardar imágenes en memoria
+import matplotlib                                                   # para los gráficos
+matplotlib.use("Agg")                                               # dibuja en memoria, sin abrir ventanas aparte
+import matplotlib.pyplot as plt
 
 # ---------- Datos ----------
 RUTA_DATOS = Path(__file__).parent.parent / "data" / "peliculas_limpio.csv"   # src/ → sube a la raíz → data/  # src/ → sube a la raíz → data/
@@ -18,7 +22,7 @@ GRIS_CLARO = "#E6D7EA"     # Lila claro para subtítulos sobre el encabezado osc
 BLANCO = "#FFFFFF"         # Blanco puro para las tarjetas y formularios
 
 # ---------- Lógica de los FILTROS (solo Pandas, sin interfaz) ----------
-filtrado = df                                                       # último resultado filtrado (lo usarán los gráficos)
+filtrado = None                                                     # último resultado filtrado (None = sin filtros)
 
 def aplicar_filtros(datos, nota_alta=False, cortas=False, populares_largas=False,
                     genero="Todos", desde=None, hasta=None, clasificacion="Todas"):
@@ -38,6 +42,59 @@ def aplicar_filtros(datos, nota_alta=False, cortas=False, populares_largas=False
     if clasificacion != "Todas":                                    # 6. una clasificación específica
         resultado = resultado[resultado["Clasificacion"] == clasificacion]
     return resultado
+
+
+# ---------- Lógica de los GRÁFICOS (solo Matplotlib, sin interfaz) ----------
+PALETAS = {                                                         # color fuerte y color suave de cada paleta
+    "Azul": ("#2F6FA8", "#BFD6EC"),
+    "Dorado": ("#B5791A", "#F2D9A8"),
+}
+
+def figura_a_png(fig):                                              # convierte una figura de Matplotlib en imagen PNG
+    memoria = io.BytesIO()                                          # un "archivo" que vive en la memoria
+    fig.tight_layout()                                              # acomoda márgenes para que nada se corte
+    fig.savefig(memoria, format="png", dpi=100)                     # guarda la figura como PNG
+    plt.close(fig)                                                  # libera la memoria de la figura
+    return memoria.getvalue()                                       # devuelve los bytes de la imagen
+
+def crear_graficos(datos, paleta="Azul"):                           # devuelve las 3 imágenes: dispersión, caja, histograma
+    fuerte, suave = PALETAS[paleta]
+
+    # 1. Dispersión: nota según el año
+    fig, ax = plt.subplots(figsize=(5.2, 3.8))
+    ax.scatter(datos["Año"], datos["Nota"], color=fuerte, alpha=0.6, edgecolors="white", linewidths=0.5)
+    ax.set_title("Nota según el año de estreno")
+    ax.set_xlabel("Año")
+    ax.set_ylabel("Nota IMDb")
+    ax.grid(alpha=0.3)
+    dispersion = figura_a_png(fig)
+
+    # 2. Caja: nota por género (los 5 géneros con más películas)
+    top = datos["Genero"].value_counts().head(5).index             # los 5 géneros más comunes
+    grupos = [datos[datos["Genero"] == g]["Nota"] for g in top]     # las notas de cada género
+    fig, ax = plt.subplots(figsize=(5.2, 3.8))
+    ax.boxplot(grupos, patch_artist=True,
+               boxprops=dict(facecolor=suave, edgecolor=fuerte),    # cajas con relleno suave y borde fuerte
+               medianprops=dict(color="#1E1C24", linewidth=2),      # mediana en negro
+               whiskerprops=dict(color=fuerte), capprops=dict(color=fuerte),
+               flierprops=dict(markeredgecolor=fuerte))
+    ax.set_xticks(range(1, len(top) + 1), list(top))                # nombre de cada género debajo de su caja
+    ax.set_title("Nota por género (5 más comunes)")
+    ax.set_xlabel("Género")
+    ax.set_ylabel("Nota IMDb")
+    ax.grid(axis="y", alpha=0.3)
+    caja = figura_a_png(fig)
+
+    # 3. Histograma: distribución de la duración
+    fig, ax = plt.subplots(figsize=(5.2, 3.8))
+    ax.hist(datos["Duracion"], bins=12, color=fuerte, edgecolor="white")
+    ax.set_title("Distribución de la duración")
+    ax.set_xlabel("Duración (minutos)")
+    ax.set_ylabel("Número de películas")
+    ax.grid(axis="y", alpha=0.3)
+    histograma = figura_a_png(fig)
+
+    return [dispersion, caja, histograma]
 
 
 def main(page: ft.Page):
@@ -128,7 +185,7 @@ def main(page: ft.Page):
                 tarjeta_opcion(ft.Icons.FILTER_ALT_OUTLINED, "Aplicar filtros", "Ver solo las que te interesan",
                                mostrar_filtros),
                 tarjeta_opcion(ft.Icons.SCATTER_PLOT_OUTLINED, "Visualizar gráficos", "Dispersión, caja e histograma",
-                               lambda e: mostrar_pantalla("Visualizar gráficos")),
+                               mostrar_graficos),
                 tarjeta_opcion(ft.Icons.BAR_CHART, "Estadísticas", "Barras, líneas y pastel",
                                lambda e: mostrar_pantalla("Estadísticas")),
             ],
@@ -537,7 +594,7 @@ def main(page: ft.Page):
             dd_genero.value, dd_clasif.value = "Todos", "Todas"
             txt_desde.value = txt_hasta.value = ""
             txt_desde.error = txt_hasta.error = None
-            filtrado = df                                           # sin filtros = todas
+            filtrado = None                                         # sin filtros = todas
             mostrar_resultado(df)
             page.update()
 
@@ -566,7 +623,11 @@ def main(page: ft.Page):
         zona_resultados = ft.Container(                             # derecha: conteo + tabla
             expand=True,
             content=ft.Column(spacing=10, controls=[
-                conteo,
+                ft.Row(wrap=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+                    conteo,
+                    ft.TextButton("Ver gráficos de estos resultados", icon=ft.Icons.SCATTER_PLOT_OUTLINED,
+                                  on_click=mostrar_graficos),           # abre los gráficos con lo filtrado
+                ]),
                 nota_limite,
                 ft.Row(scroll=ft.ScrollMode.AUTO, controls=[tabla]),   # si la tabla es ancha, se desliza
             ]),
@@ -578,6 +639,58 @@ def main(page: ft.Page):
                 padding=28,
                 content=ft.Row(spacing=24, vertical_alignment=ft.CrossAxisAlignment.START,
                                controls=[panel, zona_resultados]),
+            ),
+        )
+
+    # ---------- Ventana VISUALIZAR GRÁFICOS ----------
+    def mostrar_graficos(e=None, paleta="Azul"):
+        page.clean()                                                # borra lo que haya en pantalla
+        datos = df if filtrado is None else filtrado                # con filtros o sin filtros
+        estado = "sin filtros" if filtrado is None else "con los filtros aplicados"
+
+        def boton_paleta(nombre):                                   # botón para elegir la paleta de colores
+            fuerte, suave = PALETAS[nombre]
+            activo = nombre == paleta
+            return ft.OutlinedButton(
+                content=ft.Row(tight=True, spacing=6, controls=[
+                    ft.Container(width=14, height=14, border_radius=7, bgcolor=fuerte),
+                    ft.Container(width=14, height=14, border_radius=7, bgcolor=suave),
+                    ft.Text(nombre, color=BLANCO if activo else NEGRO),
+                ]),
+                style=ft.ButtonStyle(bgcolor=NEGRO if activo else BLANCO),
+                on_click=lambda e: mostrar_graficos(paleta=nombre), # redibuja con esa paleta
+            )
+
+        if len(datos) == 0:                                         # nada que graficar
+            contenido = [ft.Text("No hay películas con los filtros actuales. Cambia los filtros.",
+                                 size=16, color=GRIS_TEXTO)]
+        else:
+            imagenes = crear_graficos(datos, paleta)                # las 3 imágenes PNG
+            contenido = [ft.Row(wrap=True, spacing=16, run_spacing=16, alignment=ft.MainAxisAlignment.CENTER,
+                                controls=[ft.Container(bgcolor=BLANCO, border=ft.Border.all(1, GRIS_BORDE),
+                                                       border_radius=10, padding=8,
+                                                       content=ft.Image(src=img, width=470))
+                                          for img in imagenes])]
+
+        page.add(
+            barra_superior("Visualizar gráficos", "Dispersión, caja e histograma"),
+            ft.Container(
+                padding=28,
+                content=ft.Column(
+                    spacing=18,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                    controls=[
+                        ft.Row(wrap=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                               vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                            ft.Row(spacing=10, controls=[ft.Text("Colores:", size=15, weight=ft.FontWeight.W_500),
+                                                         boton_paleta("Azul"), boton_paleta("Dorado")]),
+                            ft.Row(spacing=4, controls=[
+                                ft.Text(f"Mostrando {len(datos)} películas · {estado}", size=14, color=GRIS_TEXTO),
+                                ft.TextButton("Cambiar filtros", on_click=mostrar_filtros),
+                            ]),
+                        ]),
+                    ] + contenido,
+                ),
             ),
         )
 
