@@ -6,16 +6,16 @@ from pathlib import Path                                            # para armar
 RUTA_DATOS = Path(__file__).parent.parent / "data" / "peliculas_limpio.csv"   # src/ → sube a la raíz → data/  # src/ → sube a la raíz → data/
 df = pd.read_csv(RUTA_DATOS)                                        # carga las 398 películas
 
-# ---------- Paleta de colores de CineData ----------
-NEGRO = "#1E1C24"                                                   # encabezados y botones principales
-DORADO = "#F2B84B"                                                  # ícono de inicio
-CREMA = "#F6E7C8"                                                   # fondo de los íconos
-CAFE = "#6B4207"                                                    # dibujo de los íconos
-GRIS_FONDO = "#EEEDEA"                                              # fondo de la app
-GRIS_BORDE = "#E2DFD8"                                              # bordes de las tarjetas
-GRIS_TEXTO = "#5B5850"                                              # textos secundarios
-GRIS_CLARO = "#D9D6CF"                                              # subtítulos sobre negro
-BLANCO = "#FFFFFF"
+# ---------- Paleta de colores Femenina / Estética de CineData ----------
+NEGRO = "#3D2C4D"          # Ciruela / Berenjena oscuro elegante (para encabezados y botones principales)
+DORADO = "#F2B84B"         # Se mantiene como acento
+CREMA = "#F5E6F7"          # Lila muy pálido (fondo de los íconos y texto de las pastillas)
+CAFE = "#7A4988"           # Morado malva medio (dibujo de los íconos y títulos de sección)
+GRIS_FONDO = "#FAF7F8"     # Blanco rosado / crema muy suave (fondo general de la app)
+GRIS_BORDE = "#E8DCE4"     # Borde lila/rosa grisáceo suave para las tarjetas
+GRIS_TEXTO = "#6B5E68"     # Gris malva oscuro para textos secundarios
+GRIS_CLARO = "#E6D7EA"     # Lila claro para subtítulos sobre el encabezado oscuro
+BLANCO = "#FFFFFF"         # Blanco puro para las tarjetas y formularios
 
 # ---------- Lógica de los FILTROS (solo Pandas, sin interfaz) ----------
 filtrado = df                                                       # último resultado filtrado (lo usarán los gráficos)
@@ -42,6 +42,7 @@ def aplicar_filtros(datos, nota_alta=False, cortas=False, populares_largas=False
 
 def main(page: ft.Page):
     page.title = "CineData"                                         # título de la ventana
+    page.theme_mode = ft.ThemeMode.LIGHT
     page.window.width = 1000                                        # ancho inicial
     page.window.height = 720                                        # alto inicial
     page.window.min_width = 700                                     # no se puede achicar más de esto
