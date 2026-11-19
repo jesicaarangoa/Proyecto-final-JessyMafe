@@ -6,11 +6,11 @@ import matplotlib                                                   # para los g
 matplotlib.use("Agg")                                               # dibuja en memoria, sin abrir ventanas aparte
 import matplotlib.pyplot as plt
 
-# ---------- Datos ----------
+# Datos
 RUTA_DATOS = Path(__file__).parent.parent / "data" / "peliculas_limpio.csv"   # src/ → sube a la raíz → data/  # src/ → sube a la raíz → data/
 df = pd.read_csv(RUTA_DATOS)                                        # carga las 398 películas
 
-# ---------- Paleta de colores Femenina / Estética de CineData ----------
+# Paleta de colores
 NEGRO = "#3D2C4D"          # Ciruela / Berenjena oscuro elegante (para encabezados y botones principales)
 DORADO = "#F2B84B"         # Se mantiene como acento
 CREMA = "#F5E6F7"          # Lila muy pálido (fondo de los íconos y texto de las pastillas)
@@ -21,7 +21,32 @@ GRIS_TEXTO = "#6B5E68"     # Gris malva oscuro para textos secundarios
 GRIS_CLARO = "#E6D7EA"     # Lila claro para subtítulos sobre el encabezado oscuro
 BLANCO = "#FFFFFF"         # Blanco puro para las tarjetas y formularios
 
-# ---------- Lógica de los FILTROS (solo Pandas, sin interfaz) ----------
+# Significado de cada clasificación (el CSV guarda el código; la interfaz muestra el significado)
+CLASIFICACIONES = {
+    "G": "Todo público",
+    "PG": "Se sugiere compañía de un adulto",
+    "PG-13": "Mayores de 13 años",
+    "R": "Mayores de 17 (o con un adulto)",
+    "NC-17": "Solo mayores de 17",
+    "Approved": "Aprobada (sistema clásico)",
+    "Passed": "Aprobada (sistema clásico)",
+    "Not Rated": "Sin clasificar",
+    "Unrated": "Sin clasificar",
+    "TV-14": "Mayores de 14 años",
+    "TV-MA": "Solo adultos",
+    "TV-PG": "Se sugiere compañía de un adulto",
+    "TV-G": "Todo público",
+    "TV-Y7": "Mayores de 7 años",
+}
+
+def significado(codigo):                                            # "PG-13" → "Mayores de 13 años"; si no se conoce, deja el código
+    return CLASIFICACIONES.get(str(codigo), str(codigo))
+
+def opcion_clasificacion(codigo):                                   # opción de lista: se guarda el código, se ve el significado
+    return ft.DropdownOption(key=codigo, text=f"{significado(codigo)} ({codigo})")
+
+
+# Lógica de los FILTROS (solo Pandas, sin interfaz)
 filtrado = None                                                     # último resultado filtrado (None = sin filtros)
 
 def aplicar_filtros(datos, nota_alta=False, cortas=False, populares_largas=False,
@@ -44,7 +69,7 @@ def aplicar_filtros(datos, nota_alta=False, cortas=False, populares_largas=False
     return resultado
 
 
-# ---------- Lógica de los GRÁFICOS (solo Matplotlib, sin interfaz) ----------
+# Lógica de los GRÁFICOS (solo Matplotlib, sin interfaz)
 PALETAS = {                                                         # color fuerte y color suave de cada paleta
     "Azul": ("#2F6FA8", "#BFD6EC"),
     "Dorado": ("#B5791A", "#F2D9A8"),
@@ -109,7 +134,7 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO                                # barra de desplazamiento si no cabe
     page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH       # todo ocupa el ancho completo
 
-    # ---------- Piezas reutilizables ----------
+    # Piezas reutilizables
     def chip(texto):                                                # pastillita con un dato (ej. "398 películas")
         return ft.Container(
             content=ft.Text(texto, size=13, color=CREMA),
@@ -146,7 +171,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Pantalla de INICIO ----------
+    # Pantalla de INICIO
     def mostrar_inicio(e=None):
         page.clean()                                                # borra lo que haya en pantalla
 
@@ -204,7 +229,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Barra superior de cada ventana (título + botón Inicio) ----------
+    # Barra superior de cada ventana (título + botón Inicio)
     def barra_superior(titulo, subtitulo):
         return ft.Container(
             bgcolor=NEGRO,
@@ -223,7 +248,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Pantalla provisional (mientras construimos las demás) ----------
+    # Pantalla provisional (mientras construimos las demás)
     def mostrar_pantalla(titulo):
         page.clean()                                                # borra el inicio
         page.add(
@@ -234,7 +259,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Formulario compartido (lo usan AGREGAR y CONSULTAR) ----------
+    # Formulario compartido (lo usan AGREGAR y CONSULTAR)
     def grupo(titulo, controles):                                   # recuadro con título (como en el diseño)
         return ft.Container(
             bgcolor=BLANCO,
@@ -257,8 +282,8 @@ def main(page: ft.Page):
             "Nota": ft.TextField(label="Nota IMDb (0 a 10)", width=200, keyboard_type=numero),
             "Duracion": ft.TextField(label="Duración (min)", width=170, keyboard_type=numero),
             "Año": ft.TextField(label="Año", width=160, keyboard_type=numero),
-            "Clasificacion": ft.Dropdown(label="Clasificación", width=170,
-                                         options=[ft.DropdownOption(c) for c in sorted(df["Clasificacion"].unique())]),
+            "Clasificacion": ft.Dropdown(label="Clasificación", width=300,
+                                         options=[opcion_clasificacion(c) for c in sorted(df["Clasificacion"].unique())]),
             "Metascore": ft.TextField(label="Metascore (opcional)", width=220, keyboard_type=numero),
             "Votos": ft.TextField(label="Votos", width=170, keyboard_type=numero),
             "Recaudacion": ft.TextField(label="Recaudación en millones USD (opcional)", width=360, keyboard_type=numero),
@@ -331,7 +356,7 @@ def main(page: ft.Page):
     def avisar(texto):                                              # mensaje que aparece abajo unos segundos
         page.show_dialog(ft.SnackBar(ft.Text(texto)))
 
-    # ---------- Ventana AGREGAR PELÍCULA ----------
+    # Ventana AGREGAR PELÍCULA
     def mostrar_agregar(e=None):
         page.clean()                                                # borra lo que haya en pantalla
         siguiente_codigo = "PEL-" + str(len(df) + 1).zfill(3)       # ej. PEL-399
@@ -381,7 +406,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Ventana CONSULTAR Y MODIFICAR ----------
+    # Ventana CONSULTAR Y MODIFICAR
     def mostrar_consultar(e=None):
         page.clean()                                                # borra lo que haya en pantalla
         caja_codigo = ft.TextField(label="Nombre o código de la película", hint_text="Interstellar o PEL-021", width=320)
@@ -521,7 +546,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Ventana APLICAR FILTROS ----------
+    # Ventana APLICAR FILTROS
     def mostrar_filtros(e=None):
         page.clean()                                                # borra lo que haya en pantalla
         promedio = df["Nota"].mean()                                # promedio actual de las notas
@@ -535,14 +560,15 @@ def main(page: ft.Page):
         txt_desde = ft.TextField(label="Desde (año)", width=127, keyboard_type=ft.KeyboardType.NUMBER)
         txt_hasta = ft.TextField(label="Hasta (año)", width=127, keyboard_type=ft.KeyboardType.NUMBER)
         dd_clasif = ft.Dropdown(label="Clasificación", value="Todas", width=270,
-                                options=[ft.DropdownOption(c) for c in ["Todas"] + sorted(df["Clasificacion"].unique())])
+                                options=[ft.DropdownOption("Todas")] +
+                                        [opcion_clasificacion(c) for c in sorted(df["Clasificacion"].unique())])
 
-        # --- Zona de resultados (derecha) ---
+        # Zona de resultados (derecha)
         conteo = ft.Text("", size=18, weight=ft.FontWeight.W_500, color=NEGRO)
         nota_limite = ft.Text("", size=13, color=GRIS_TEXTO)
         tabla = ft.DataTable(
             columns=[ft.DataColumn(ft.Text(t)) for t in
-                     ["Código", "Título", "Género", "Nota", "Min", "Popularidad", "Año", "Clasif."]],
+                     ["Código", "Título", "Género", "Nota", "Min", "Popularidad", "Año", "Clasificación"]],
             rows=[],
             heading_row_color="#F4F3F0",                            # encabezado gris claro
             border=ft.Border.all(1, GRIS_BORDE),
@@ -558,7 +584,8 @@ def main(page: ft.Page):
                     ft.DataCell(ft.Text(f["Codigo"])),
                     ft.DataCell(ft.Container(width=200, content=ft.Text(f["Titulo"], max_lines=2))),   # título en máx. 2 líneas
                     *[ft.DataCell(ft.Text(str(v))) for v in
-                      [f["Genero"], f["Nota"], f["Duracion"], f["Popularidad"], f["Año"], f["Clasificacion"]]],
+                      [f["Genero"], f["Nota"], f["Duracion"], f["Popularidad"], f["Año"]]],
+                    ft.DataCell(ft.Container(width=170, content=ft.Text(significado(f["Clasificacion"]), max_lines=2))),
                 ])
                 for _, f in datos.head(MAX_FILAS).iterrows()       # recorre fila por fila
             ]
@@ -642,7 +669,7 @@ def main(page: ft.Page):
             ),
         )
 
-    # ---------- Ventana VISUALIZAR GRÁFICOS ----------
+    # Ventana VISUALIZAR GRÁFICOS
     def mostrar_graficos(e=None, paleta="Azul"):
         page.clean()                                                # borra lo que haya en pantalla
         datos = df if filtrado is None else filtrado                # con filtros o sin filtros
