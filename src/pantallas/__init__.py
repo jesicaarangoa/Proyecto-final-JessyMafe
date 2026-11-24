@@ -1,0 +1,1 @@
+# Este archivo vacío le dice a Python que la carpeta "pantallas" tiene código que se puede importar.
