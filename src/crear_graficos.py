@@ -8,7 +8,7 @@ import matplotlib                                                   # para los g
 matplotlib.use("Agg")                                               # dibuja en memoria, sin abrir ventanas aparte
 import matplotlib.pyplot as plt
 
-from colores import PALETAS                                         # las paletas Azul y Dorado
+from colores import PALETAS                                         # las paletas Rosado y Dorado
 
 
 def figura_a_png(fig):                                              # convierte una figura de Matplotlib en imagen PNG
@@ -19,8 +19,8 @@ def figura_a_png(fig):                                              # convierte 
     return memoria.getvalue()                                       # devuelve los bytes de la imagen
 
 
-def crear_graficos(tabla, paleta="Azul"):                           # devuelve las 3 imágenes: dispersión, caja, histograma
-    fuerte, suave = PALETAS[paleta]
+def crear_graficos(tabla, paleta="Rosado"):                         # devuelve las 3 imágenes: dispersión, barras, histograma
+    fuerte, _ = PALETAS.get(paleta, PALETAS["Rosado"])              # si el nombre no existe, usa Rosado
 
     # 1. Dispersión: nota según el año
     fig, ax = plt.subplots(figsize=(5.2, 3.8))
@@ -31,21 +31,21 @@ def crear_graficos(tabla, paleta="Azul"):                           # devuelve l
     ax.grid(alpha=0.3)
     dispersion = figura_a_png(fig)
 
-    # 2. Caja: nota por género (los 5 géneros con más películas)
+    # 2. Barras: promedio de nota por género (los 5 géneros con más películas)
     top = tabla["Genero"].value_counts().head(5).index             # los 5 géneros más comunes
-    grupos = [tabla[tabla["Genero"] == g]["Nota"] for g in top]     # las notas de cada género
+    promedios = (tabla[tabla["Genero"].isin(top)]                   # solo esas películas
+                 .groupby("Genero")["Nota"].mean()                  # promedio de nota de cada género
+                 .sort_values(ascending=False))                     # de mayor a menor
     fig, ax = plt.subplots(figsize=(5.2, 3.8))
-    ax.boxplot(grupos, patch_artist=True,
-               boxprops=dict(facecolor=suave, edgecolor=fuerte),    # cajas con relleno suave y borde fuerte
-               medianprops=dict(color="#1E1C24", linewidth=2),      # mediana en negro
-               whiskerprops=dict(color=fuerte), capprops=dict(color=fuerte),
-               flierprops=dict(markeredgecolor=fuerte))
-    ax.set_xticks(range(1, len(top) + 1), list(top))                # nombre de cada género debajo de su caja
-    ax.set_title("Nota por género (5 más comunes)")
+    dibujo = ax.bar(list(promedios.index), promedios.values, color=fuerte)
+    ax.bar_label(dibujo, fmt="%.2f", padding=3)                     # escribe el promedio sobre cada barra
+    ax.set_ylim(0, 10)                                              # escala completa de IMDb, desde cero
+    ax.set_title("Promedio de nota por género (5 más comunes)", fontsize=11)
     ax.set_xlabel("Género")
-    ax.set_ylabel("Nota IMDb")
+    ax.set_ylabel("Nota IMDb promedio")
     ax.grid(axis="y", alpha=0.3)
-    caja = figura_a_png(fig)
+    ax.set_axisbelow(True)                                          # la cuadrícula queda detrás de las barras
+    barras = figura_a_png(fig)
 
     # 3. Histograma: distribución de la duración
     fig, ax = plt.subplots(figsize=(5.2, 3.8))
@@ -56,4 +56,4 @@ def crear_graficos(tabla, paleta="Azul"):                           # devuelve l
     ax.grid(axis="y", alpha=0.3)
     histograma = figura_a_png(fig)
 
-    return [dispersion, caja, histograma]
+    return [dispersion, barras, histograma]

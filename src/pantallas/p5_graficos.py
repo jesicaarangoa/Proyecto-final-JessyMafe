@@ -11,7 +11,7 @@ from crear_graficos import crear_graficos                           # crea las 3
 from piezas_comunes import barra_superior
 
 
-def mostrar(page, navegar, paleta="Azul"):
+def mostrar(page, navegar, paleta="Rosado"):
     tabla = datos.df if datos.filtrado is None else datos.filtrado  # con filtros o sin filtros
     estado = "sin filtros" if datos.filtrado is None else "con los filtros aplicados"
 
@@ -50,7 +50,7 @@ def mostrar(page, navegar, paleta="Azul"):
                     ft.Row(wrap=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                            vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
                         ft.Row(spacing=10, controls=[ft.Text("Colores:", size=15, weight=ft.FontWeight.W_500),
-                                                     boton_paleta("Azul"), boton_paleta("Dorado")]),
+                                                     boton_paleta("Rosado"), boton_paleta("Dorado")]),
                         ft.Row(spacing=4, controls=[
                             ft.Text(f"Mostrando {len(tabla)} películas · {estado}", size=14, color=GRIS_MALVA),
                             ft.TextButton("Cambiar filtros", on_click=lambda e: navegar("filtros")),

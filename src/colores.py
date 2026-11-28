@@ -1,7 +1,6 @@
 # ============================================================
 # colores.py
 # Todos los colores de la app y las paletas de los gráficos.
-# Si quieren cambiar un color en TODA la app, se cambia aquí y listo.
 # ============================================================
 
 # ---------- Colores de la app (paleta ciruela / lila) ----------
@@ -18,6 +17,6 @@ ROJO_ERROR = "#A32D2D"     # Rojo: avisos de error
 
 # ---------- Paletas de los gráficos (color fuerte, color suave) ----------
 PALETAS = {
-    "Azul": ("#2F6FA8", "#BFD6EC"),
+    "Rosado": ("#D6457F", "#F6C1D6"),
     "Dorado": ("#B5791A", "#F2D9A8"),
 }
